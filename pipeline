@@ -1,0 +1,60 @@
+pipeline {
+  environment {
+    registry = "anuj/quiz"
+    registryCredential = 'docker-hub-credentials'
+    dockerImage = ''
+    dockerImageLatest = ''
+  }
+  agent any
+  stages {
+    stage('Cloning Git') {
+      steps {
+        git 'https://github.com/Anuj-IIITB-2019/quiz.git'
+      }
+    }
+    stage('Build Executable War'){
+        steps {
+             sh 'mvn clean test package'
+        }
+    }
+    stage('Building image') {
+      steps{
+        script {
+          dockerImage = docker.build registry + ":$BUILD_NUMBER"
+          dockerImageLatest = docker.build registry + ":latest"
+        }
+      }
+    }
+    stage('Deploy Image') {
+      steps{
+        script {
+          docker.withRegistry( '', registryCredential ) {
+            dockerImage.push()
+            dockerImageLatest.push()
+}
+ }}}
+    stage('Remove Unused docker image') {
+      steps{
+        sh "docker rmi $registry:$BUILD_NUMBER"}
+}
+    
+    stage('Execute Rundeck job') {
+        steps {
+          script {
+            step([$class: "RundeckNotifier",
+                  includeRundeckLogs: true,
+                  jobId: "d9a0d8a1-517c-4f8a-9823-fe0082d726fa",
+                  rundeckInstance: "Rundeck",
+                  shouldFailTheBuild: true,
+                  shouldWaitForRundeckJob: true,
+                  tailLog: true])
+          }}}
+    
+  }
+  post {
+      always{
+        emailext body: "Dear Sir/Mam, <br/><br/> ${currentBuild.currentResult}: Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}  <br/>  More info at: ${env.BUILD_URL}  <br/><br/>  THIS IS A SYSTEM GENERATED EMAIL. PLEASE DO NOT REPLY.",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']],
+                subject: "Jenkins Build ${currentBuild.currentResult}: Job ${env.JOB_NAME}"
+  }    }    }
+
